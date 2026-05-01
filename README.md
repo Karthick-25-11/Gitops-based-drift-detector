@@ -81,7 +81,6 @@ This project solves that by:
                  │      drift_log.json          │
                  │   Stores history & audit     │
                  └──────────────────────────────┘
-```
 
 
 ---

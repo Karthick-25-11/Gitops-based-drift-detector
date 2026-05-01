@@ -152,6 +152,9 @@ Manual change detected in AWS (SSH port opened).
 
 ![Drift Detected](assets/drift_detected.png)
 
+## Security Group
+![SG](assets/Security_group_aws.png)
+
 ##  Errors Faced & Fixes
 
 ### 1. AWS CLI not found (WSL issue)

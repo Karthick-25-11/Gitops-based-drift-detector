@@ -139,8 +139,18 @@ Stored in:
 ```text
 app/drift_log.json
 ```
+## No Drift State
 
+System is in expected configuration with no mismatch.
+
+![No Drift](assets/no_drift_detected.png)
 ---
+
+##  Drift Detected
+
+Manual change detected in AWS (SSH port opened).
+
+![Drift Detected](assets/drift_detected.png)
 
 ##  Errors Faced & Fixes
 

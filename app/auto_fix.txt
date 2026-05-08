@@ -2,3 +2,4 @@ trigger-pr
 Drift Fix Triggered: 2026-05-08 07:42:38.763712 - Security Fix: Remove SSH Exposure
 Drift Fix Triggered: 2026-05-08 07:50:28.685182 - Security Fix: Remove SSH Exposure
 Drift Fix Triggered: 2026-05-08 08:28:11.145938 - Security Fix: Remove SSH Exposure
+Drift Fix Triggered: 2026-05-08 08:28:14.974767 - Ops Fix: Align EC2 Instance Type (i-0d8fba0469aef3a03)

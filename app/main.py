@@ -10,92 +10,204 @@ import subprocess
 # --- CONFIGURATION ---
 DESIRED_PORTS = [80, 443]
 DESIRED_INSTANCE_TYPE = "t3.micro"
-INSTANCE_ID = "i-0d8fba0469aef3a03" 
+
+INSTANCE_ID = "i-0d8fba0469aef3a03"
 SG_NAME = "demo-sg-v2"
 
-# Updated path: Assuming you are running from /app and your tf is in /terraform
-TF_FILE = "../terraform/security_group.tf" 
 
 def save_result(resource, result, actual):
-    log = {"timestamp": str(datetime.now()), "resource": resource, "actual": actual, "result": result}
+    log = {
+        "timestamp": str(datetime.now()),
+        "resource": resource,
+        "actual": actual,
+        "result": result
+    }
+
     with open("drift_log.json", "a") as f:
         f.write(json.dumps(log) + "\n")
 
-def create_self_healing_pr(title, body, branch_name, old_val, new_val):
+
+def create_self_healing_pr(title, body, branch_name):
     token = os.environ.get("GITHUB_TOKEN")
-    repo = os.environ.get("GITHUB_REPO") 
+    repo = os.environ.get("GITHUB_REPO")
 
     if not token or not repo:
         print(f"❌ Missing GitHub Credentials for: {title}")
         return
 
-    # 1. Prepare Git Branch - always start fresh from main
-    subprocess.run(["git", "checkout", "main"], stderr=subprocess.DEVNULL)
-    subprocess.run(["git", "pull", "origin", "main"], stderr=subprocess.DEVNULL)
-    subprocess.run(["git", "checkout", "-b", branch_name], stderr=subprocess.DEVNULL)
-    
-    # 2. THE CORE LOGIC: Edit the actual Terraform file
-    try:
-        with open(TF_FILE, 'r') as f:
-            content = f.read()
-        
-        # Self-Healing Replacement
-        updated_content = content.replace(f'"{old_val}"', f'"{new_val}"')
-        
-        with open(TF_FILE, 'w') as f:
-            f.write(updated_content)
-        
-        print(f"📝 Modified {TF_FILE}: Changed '{old_val}' -> '{new_val}'")
-    except FileNotFoundError:
-        print(f"❌ Error: {TF_FILE} not found at that path. Check your directory structure!")
-        return
+    # --- Prepare Fresh Branch ---
+    subprocess.run(["git", "checkout", "main"])
+    subprocess.run(["git", "pull", "origin", "main"])
+    subprocess.run(["git", "checkout", "-b", branch_name])
 
-    # 3. Commit and Push the REAL code change
-    subprocess.run(["git", "add", TF_FILE])
-    subprocess.run(["git", "commit", "-m", title], stderr=subprocess.DEVNULL)
-    subprocess.run(["git", "push", "-u", "origin", branch_name], stderr=subprocess.DEVNULL)
+    # --- Create reconciliation marker file ---
+    marker_file = "reconcile.txt"
 
-    # 4. Open PR via API
+    with open(marker_file, "w") as f:
+        f.write(f"Reconciliation approved at {datetime.now()}\n")
+
+    print(f"📝 Created reconciliation marker: {marker_file}")
+
+    # --- Commit real change ---
+    subprocess.run(["git", "add", marker_file])
+    subprocess.run(["git", "commit", "-m", title])
+
+    # --- Push branch ---
+    subprocess.run([
+        "git",
+        "push",
+        "--set-upstream",
+        "origin",
+        branch_name
+    ])
+
+    # --- Create PR ---
     url = f"https://api.github.com/repos/{repo}/pulls"
-    headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github+json"}
-    data = {"title": title, "head": branch_name, "base": "main", "body": body}
+
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github+json"
+    }
+
+    data = {
+        "title": title,
+        "head": branch_name,
+        "base": "main",
+        "body": body
+    }
 
     response = requests.post(url, json=data, headers=headers)
+
     if response.status_code == 201:
-        print(f"🔧 PR Created: {response.json()['html_url']}")
-        # Cleanup: Return to main
-        subprocess.run(["git", "checkout", "main"], stderr=subprocess.DEVNULL)
+        print(f"\n🔧 PR Created Successfully:")
+        print(response.json()["html_url"])
+
+        # return back to main
+        subprocess.run(["git", "checkout", "main"])
+
     else:
-        print(f"❌ PR Failed: {response.text}")
+        print(f"\n❌ PR Failed:")
+        print(response.text)
+
 
 def main():
     print("\n🚀 GITOPS SELF-HEALING ENGINE")
-    print("="*40)
+    print("=" * 40)
 
-    # --- EC2 INSTANCE TYPE CHECK ---
-    print(f"🔍 Checking EC2: {INSTANCE_ID}...")
+    # =========================================================
+    # EC2 DRIFT CHECK
+    # =========================================================
+
+    print(f"\n🔍 Checking EC2: {INSTANCE_ID}...")
+
     instance = get_ec2_instance_by_id(INSTANCE_ID)
-    
+
     if instance:
+
         actual_type = instance["type"]
+
         if actual_type != DESIRED_INSTANCE_TYPE:
-            print(f"   ⚠️ DRIFT: AWS has {actual_type}, Code has {DESIRED_INSTANCE_TYPE}")
-            
-            # Create a unique branch for this specific fix
-            timestamp = datetime.now().strftime('%H%M%S')
-            create_self_healing_pr(
-                title=f"Fix: Update EC2 type to {actual_type}",
-                body=f"Drift Intelligence detected manual scaling. This PR updates {TF_FILE} to match AWS.",
-                branch_name=f"fix/ec2-healing-{timestamp}",
-                old_val=DESIRED_INSTANCE_TYPE,
-                new_val=actual_type
+
+            print(
+                f"   ⚠️ DRIFT: AWS has {actual_type}, "
+                f"Code has {DESIRED_INSTANCE_TYPE}"
             )
+
+            result = {
+                "drift": True,
+                "severity": "HIGH",
+                "reason": "EC2 instance type drift"
+            }
+
+            save_result(
+                "ec2_instance_type",
+                result,
+                actual_type
+            )
+
+            timestamp = datetime.now().strftime('%H%M%S')
+
+            create_self_healing_pr(
+                title="Ops Fix: Reconcile EC2 Instance Type Drift",
+                body=(
+                    f"GitOps detected EC2 drift.\n\n"
+                    f"AWS Instance Type: {actual_type}\n"
+                    f"Terraform Desired State: {DESIRED_INSTANCE_TYPE}\n\n"
+                    f"Merge this PR to trigger Terraform reconciliation "
+                    f"and restore infrastructure to desired state."
+                ),
+                branch_name=f"fix/ec2-healing-{timestamp}"
+            )
+
         else:
-            print("   ✅ EC2 Instance type is in sync.")
+            print("   ✅ EC2 Instance type is in sync")
+
+    else:
+        print("❌ EC2 instance not found")
+
+    # =========================================================
+    # SECURITY GROUP DRIFT CHECK
+    # =========================================================
+
+    print(f"\n🔍 Checking Security Group: {SG_NAME}...")
+
+    sg = get_security_group_by_name(SG_NAME)
+
+    if sg:
+
+        actual_ports = sg["ports"]
+
+        result = detect_drift(
+            DESIRED_PORTS,
+            actual_ports
+        )
+
+        save_result(
+            "security_group_ports",
+            result,
+            actual_ports
+        )
+
+        print("Actual Ports:", actual_ports)
+
+        if result["drift"]:
+
+            print(
+                f"\n⚠️ Drift detected! "
+                f"Severity: {result['severity']}"
+            )
+
+            print("Reason:", result["reason"])
+            print("Extra Ports:", result["extra_ports"])
+            print("Missing Ports:", result["missing_ports"])
+
+            # Example:
+            # AWS has port 22 manually added
+            # Terraform does not allow it
+
+            if 22 in result.get("extra_ports", []):
+
+                timestamp = datetime.now().strftime('%H%M%S')
+
+                create_self_healing_pr(
+                    title="Security Fix: Remove SSH Exposure",
+                    body=(
+                        "GitOps detected unauthorized SSH exposure.\n\n"
+                        "Port 22 exists in AWS but not in Terraform.\n\n"
+                        "Merge this PR to trigger Terraform reconciliation "
+                        "and remove the drift."
+                    ),
+                    branch_name=f"fix/sg-healing-{timestamp}"
+                )
+
+        else:
+            print("   ✅ Security Group is in sync")
+
+    else:
+        print("❌ Security Group not found")
 
     print("\n✅ ANALYSIS COMPLETE\n")
 
+
 if __name__ == "__main__":
     main()
-
-#check

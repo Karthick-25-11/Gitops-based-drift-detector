@@ -11,7 +11,7 @@ import subprocess
 DESIRED_PORTS = [80, 443]
 
 # Must match Terraform desired state
-DESIRED_INSTANCE_TYPE = "t3.small"
+DESIRED_INSTANCE_TYPE = "t3.micro"
 
 INSTANCE_ID = "i-0d8fba0469aef3a03"
 SG_NAME = "demo-sg-v2"

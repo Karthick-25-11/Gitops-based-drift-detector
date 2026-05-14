@@ -1,45 +1,40 @@
-def detect_drift(desired, actual):
+def detect_drift(desired_ports, actual_ports):
     """
-    Intelligence logic to detect differences between IaC and Cloud.
-    Works for both Security Group lists and EC2 attribute strings.
+    Existing logic for Security Group port comparison.
     """
+    extra_ports = [p for p in actual_ports if p not in desired_ports]
+    missing_ports = [p for p in desired_ports if p not in actual_ports]
     
-    # CASE 1: Comparing Lists (Security Group Ports)
-    if isinstance(desired, list) and isinstance(actual, list):
-        desired_set = set(desired)
-        actual_set = set(actual)
+    drift = len(extra_ports) > 0 or len(missing_ports) > 0
+    
+    return {
+        "drift": drift,
+        "severity": "HIGH" if 22 in extra_ports else "MEDIUM",
+        "reason": "Security Group port mismatch",
+        "extra_ports": extra_ports,
+        "missing_ports": missing_ports
+    }
 
-        if desired_set == actual_set:
-            return {"drift": False, "severity": "NONE", "reason": "No drift detected"}
+def compare_ec2_instance(actual_type, desired_type):
+    """Returns True if instance types match."""
+    return actual_type == desired_type
 
-        extra_ports = list(actual_set - desired_set)
-        missing_ports = list(desired_set - actual_set)
+def compare_s3_public_access(actual_config, desired_config):
+    """
+    Compares S3 Public Access Block settings.
+    Returns a list of keys that have drifted (e.g., set to False in AWS).
+    """
+    drifts = []
+    for key, desired_value in desired_config.items():
+        if actual_config.get(key) != desired_value:
+            drifts.append(key)
+    return drifts
 
-        # Intelligence: Severity logic
-        severity = "MEDIUM"
-        reason = "Configuration drift detected"
-
-        if 22 in extra_ports:
-            severity = "HIGH"
-            reason = "SSH port exposed (security risk)"
-
-        return {
-            "drift": True,
-            "severity": severity,
-            "missing_ports": missing_ports,
-            "extra_ports": extra_ports,
-            "reason": reason
-        }
-
-    # CASE 2: Comparing Strings (EC2 Instance Type)
-    else:
-        if desired == actual:
-            return {"drift": False, "severity": "NONE", "reason": "No drift detected"}
-        
-        return {
-            "drift": True,
-            "severity": "MEDIUM",
-            "reason": f"Attribute mismatch: Expected {desired}, found {actual}",
-            "actual": actual,
-            "desired": desired
-        }
+def compare_iam_policies(actual_policies, desired_policies):
+    """
+    Checks for extra policies attached to the role.
+    Returns a list of unauthorized policies found in AWS.
+    """
+    # We identify policies in AWS that are NOT in our Git Source of Truth
+    extra_policies = [p for p in actual_policies if p not in desired_policies]
+    return extra_policies

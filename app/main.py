@@ -18,7 +18,7 @@ from comparator import (
 
 # --- CONFIGURATION ---
 DESIRED_PORTS = [80, 443]
-DESIRED_INSTANCE_TYPE = "t3.micro"
+DESIRED_INSTANCE_TYPE = "t3.small"
 INSTANCE_ID = "i-0d8fba0469aef3a03"
 SG_NAME = "demo-sg-v2"
 
